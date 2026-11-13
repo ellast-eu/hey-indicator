@@ -1,0 +1,21 @@
+# Copier dans /etc/systemd/system/, adapter les chemins, puis :
+#   sudo systemctl daemon-reload && sudo systemctl enable --now hey-indicator
+#
+# Le jeton de l'API se met dans /etc/hey-indicator.env (chmod 600) :
+#   HEY_TOKEN=une-longue-chaine-aleatoire
+[Unit]
+Description=hey-indicator
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+# root : exigé par la bibliothèque de la dalle HUB75 (accès direct aux GPIO).
+User=root
+WorkingDirectory=/opt/hey-indicator
+EnvironmentFile=-/etc/hey-indicator.env
+ExecStart=/opt/hey-indicator/env/bin/python main.py
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

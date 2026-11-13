@@ -1,0 +1,11 @@
+# Partout (simulateur, tests, aperçus)
+Pillow
+
+# Sur le Raspberry Pi uniquement
+gpiozero
+# rgbmatrix : bibliothèque hzeller/rpi-rgb-led-matrix, à compiler sur le Pi
+# (voir hardware/README.md, script d'installation Adafruit).
+
+# Pour régénérer le boîtier (sur le PC)
+# cadquery
+# numpy

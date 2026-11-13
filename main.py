@@ -1,74 +1,87 @@
-import RPi.GPIO as GPIO
+#!/usr/bin/env python3
+"""hey-indicator v2 : indicateur de disponibilité à écran LED, façon BUSY Bar.
+
+Sur le Raspberry Pi (en root, exigé par la dalle HUB75) :
+    sudo python3 main.py
+
+Sur n'importe quel PC, sans matériel (simulateur dans le terminal) :
+    python3 main.py --sim
+"""
+
+import argparse
+import signal
+import sys
+import threading
 import time
 
-# Configuration des GPIO
-GPIO.setmode(GPIO.BCM)
+from hey.api import start_server
+from hey.config import Config
+from hey.render import Renderer
+from hey.state import Indicator
 
-# Définir les pins
-LED_PINS = {
-    "free": 17,
-    "busy": 27,
-    "on_air": 22,
-    "hey": 23,
-    "urgency": 24
-}
-BUTTON_PINS = {
-    "on_air": 5,
-    "hey": 6,
-    "urgency": 13
-}
-SWITCH_PIN = 19  # Interrupteur pour Free/Busy
 
-# Configurer les LED en sortie
-for pin in LED_PINS.values():
-    GPIO.setup(pin, GPIO.OUT)
-    GPIO.output(pin, GPIO.LOW)
+def main():
+    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser.add_argument("--sim", action="store_true",
+                        help="simulateur dans le terminal, commandes au clavier")
+    parser.add_argument("--port", type=int, help="port de l'API HTTP")
+    parser.add_argument("--host", help="adresse d'écoute de l'API HTTP")
+    parser.add_argument("--no-api", action="store_true", help="ne pas lancer l'API HTTP")
+    args = parser.parse_args()
 
-# Configurer les boutons en entrée avec pull-down
-for pin in BUTTON_PINS.values():
-    GPIO.setup(pin, GPIO.IN, pull_up_down=GPIO.PUD_DOWN)
+    cfg = Config()
+    if args.port:
+        cfg.http_port = args.port
+    if args.host:
+        cfg.http_host = args.host
 
-# Configurer l'interrupteur en entrée avec pull-down
-GPIO.setup(SWITCH_PIN, GPIO.IN, pull_up_down=GPIO.PUD_DOWN)
+    indicator = Indicator(cfg)
+    renderer = Renderer(cfg)
+    stop = threading.Event()
 
-# Fonction pour clignoter une LED
-def blink_led(pin, duration=1, interval=0.5):
-    end_time = time.time() + duration
-    while time.time() < end_time:
-        GPIO.output(pin, GPIO.HIGH)
-        time.sleep(interval)
-        GPIO.output(pin, GPIO.LOW)
-        time.sleep(interval)
+    if args.sim:
+        from hey.display import TerminalDisplay
+        from hey.inputs import KEYS_HELP, KeyboardInputs
 
-# Boucle principale
-try:
-    while True:
-        # Gérer Free/Busy via interrupteur
-        if GPIO.input(SWITCH_PIN):
-            GPIO.output(LED_PINS["free"], GPIO.LOW)
-            GPIO.output(LED_PINS["busy"], GPIO.HIGH)
-        else:
-            GPIO.output(LED_PINS["busy"], GPIO.LOW)
-            GPIO.output(LED_PINS["free"], GPIO.HIGH)
+        display = TerminalDisplay(cfg)
+        inputs = KeyboardInputs(cfg, indicator, stop.set)
+        footer = KEYS_HELP
+    else:
+        from hey.display import Hub75Display
+        from hey.inputs import GpioInputs
 
-        # Vérifier le bouton On Air
-        if GPIO.input(BUTTON_PINS["on_air"]):
-            GPIO.output(LED_PINS["on_air"], GPIO.HIGH)
-        else:
-            GPIO.output(LED_PINS["on_air"], GPIO.LOW)
+        display = Hub75Display(cfg)         # avant gpiozero : initialise en root
+        inputs = GpioInputs(cfg, indicator)
+        footer = ""
 
-        # Vérifier le bouton Hey!
-        if GPIO.input(BUTTON_PINS["hey"]):
-            GPIO.output(LED_PINS["hey"], GPIO.HIGH)
-        else:
-            GPIO.output(LED_PINS["hey"], GPIO.LOW)
+    server = None
+    if not args.no_api:
+        server = start_server(indicator, cfg, display)
+        if not cfg.token and cfg.http_host not in ("127.0.0.1", "localhost", "::1"):
+            print("Attention : API ouverte sans jeton (définir HEY_TOKEN).", file=sys.stderr)
 
-        # Vérifier le bouton Urgency!
-        if GPIO.input(BUTTON_PINS["urgency"]):
-            blink_led(LED_PINS["urgency"], duration=3)  # Clignote pendant 3 secondes
+    signal.signal(signal.SIGTERM, lambda *_: stop.set())
+    period = 1.0 / cfg.fps
+    try:
+        while not stop.is_set():
+            started = time.monotonic()
+            indicator.tick()
+            display.show(renderer.render(indicator.snapshot()))
+            if footer:
+                sys.stdout.write("\x1b[0m" + footer + "\x1b[K\r\n")
+                if server:
+                    sys.stdout.write("API : http://%s:%d/\x1b[K\r\n" % server.server_address[:2])
+                sys.stdout.flush()
+            stop.wait(max(0.0, period - (time.monotonic() - started)))
+    except KeyboardInterrupt:
+        pass
+    finally:
+        if server:
+            server.shutdown()
+        inputs.close()
+        display.close()
+        print("Arrêt du programme")
 
-        time.sleep(0.1)  # Petite pause pour éviter la surcharge CPU
 
-except KeyboardInterrupt:
-    print("Arrêt du programme")
-    GPIO.cleanup()
+if __name__ == "__main__":
+    main()
