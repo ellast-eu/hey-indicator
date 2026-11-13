@@ -59,10 +59,11 @@ class GpioInputs:
         self._devices.append(knob)
 
         self._buzzer = None
+        self._closing = False
+        self._sound_lock = threading.Lock()
         if cfg.buzzer_pin is not None:
             self._buzzer = PWMOutputDevice(cfg.buzzer_pin, initial_value=0, frequency=880)
             self._devices.append(self._buzzer)
-            self._sound_lock = threading.Lock()
             indicator.subscribe(self._on_event)
 
     def _on_hold(self):
@@ -81,6 +82,8 @@ class GpioInputs:
     def _play(self, notes):
         with self._sound_lock:
             for frequency, duration in notes:
+                if self._closing:
+                    return
                 if frequency:
                     self._buzzer.frequency = frequency
                     self._buzzer.value = 0.5
@@ -90,8 +93,10 @@ class GpioInputs:
             self._buzzer.value = 0
 
     def close(self):
-        for device in self._devices:
-            device.close()
+        self._closing = True
+        with self._sound_lock:              # attend la fin de la note en cours
+            for device in self._devices:
+                device.close()
 
 
 KEYS_HELP = ("f/b free/busy   o on air   h hey   u urgency   espace molette   "
