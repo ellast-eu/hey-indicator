@@ -1,7 +1,6 @@
 # hey-indicator
 
-Indicateur de disponibilité de bureau à écran LED, dans l'esprit du
-[BUSY Bar](https://busy.app/) : une dalle 64x32 affiche **FREE**, **BUSY**,
+Indicateur de disponibilité de bureau à écran LED : une dalle 64x32 affiche **FREE**, **BUSY**,
 **ON AIR**, un **HEY!** ou une alerte **URGENT**, plus un minuteur Pomodoro.
 
 ![Les écrans](docs/screens/planche.png)
