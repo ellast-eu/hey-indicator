@@ -24,6 +24,7 @@ class GpioInputs:
     def __init__(self, cfg, indicator):
         from gpiozero import Button, PWMOutputDevice, RotaryEncoder
 
+        cfg.check_pins()
         self._indicator = indicator
         self._devices = []
 
@@ -44,19 +45,18 @@ class GpioInputs:
             button.when_pressed = actions[name]
             self._devices.append(button)
 
-        # Molette : rotation = minutes, appui court = start/pause ou
-        # acquittement, appui long = remise à zéro du minuteur.
+        # Molette : rotation = minutes.
         encoder = RotaryEncoder(cfg.encoder_a_pin, cfg.encoder_b_pin, max_steps=0)
         encoder.when_rotated_clockwise = lambda: indicator.adjust(+1)
         encoder.when_rotated_counter_clockwise = lambda: indicator.adjust(-1)
         self._devices.append(encoder)
 
-        self._held = False
-        knob = Button(cfg.encoder_sw_pin, pull_up=True, bounce_time=0.05,
-                      hold_time=cfg.hold_time)
-        knob.when_held = self._on_hold
-        knob.when_released = self._on_release
-        self._devices.append(knob)
+        # Touche mécanique du dessus et appui sur la molette, même rôle :
+        # appui court = acquitte une alerte, sinon démarre / met en pause ;
+        # appui long = remise à zéro du minuteur.
+        for pin in (cfg.key_pin, cfg.encoder_sw_pin):
+            if pin is not None:
+                self._devices.append(self._press_button(Button, pin, cfg.hold_time))
 
         self._buzzer = None
         self._closing = False
@@ -66,14 +66,23 @@ class GpioInputs:
             self._devices.append(self._buzzer)
             indicator.subscribe(self._on_event)
 
-    def _on_hold(self):
-        self._held = True
-        self._indicator.long_press()
+    def _press_button(self, button_class, pin, hold_time):
+        """Bouton à appui court / appui long, chacun avec son propre état."""
+        button = button_class(pin, pull_up=True, bounce_time=0.05, hold_time=hold_time)
+        state = {"held": False}
 
-    def _on_release(self):
-        if not self._held:
-            self._indicator.press()
-        self._held = False
+        def on_hold():
+            state["held"] = True
+            self._indicator.long_press()
+
+        def on_release():
+            if not state["held"]:
+                self._indicator.press()
+            state["held"] = False
+
+        button.when_held = on_hold
+        button.when_released = on_release
+        return button
 
     def _on_event(self, name):
         if name in SOUNDS:
@@ -99,7 +108,7 @@ class GpioInputs:
                 device.close()
 
 
-KEYS_HELP = ("f/b free/busy   o on air   h hey   u urgency   espace molette   "
+KEYS_HELP = ("f/b free/busy   o on air   h hey   u urgency   espace touche   "
              "r reset   +/- minutes   q quitter")
 
 

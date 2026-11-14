@@ -15,7 +15,8 @@ import threading
 import time
 
 from hey.api import start_server
-from hey.config import Config
+from hey.config import PANELS, Config
+from hey.rear import RearRenderer, local_address
 from hey.render import Renderer
 from hey.state import Indicator
 
@@ -27,9 +28,11 @@ def main():
     parser.add_argument("--port", type=int, help="port de l'API HTTP")
     parser.add_argument("--host", help="adresse d'écoute de l'API HTTP")
     parser.add_argument("--no-api", action="store_true", help="ne pas lancer l'API HTTP")
+    parser.add_argument("--panel", choices=sorted(PANELS),
+                        help="dalle avant (défaut : HEY_PANEL, sinon 64x32)")
     args = parser.parse_args()
 
-    cfg = Config()
+    cfg = Config(panel=args.panel) if args.panel else Config()
     if args.port:
         cfg.http_port = args.port
     if args.host:
@@ -37,6 +40,7 @@ def main():
 
     indicator = Indicator(cfg)
     renderer = Renderer(cfg)
+    rear_renderer = RearRenderer(cfg, local_address())
     stop = threading.Event()
 
     if args.sim:
@@ -44,13 +48,23 @@ def main():
         from hey.inputs import KEYS_HELP, KeyboardInputs
 
         display = TerminalDisplay(cfg)
+        rear = None                         # dessiné par le simulateur lui-même
         inputs = KeyboardInputs(cfg, indicator, stop.set)
         footer = KEYS_HELP
     else:
         from hey.display import Hub75Display
         from hey.inputs import GpioInputs
 
+        cfg.check_pins()                    # avant de toucher au matériel
         display = Hub75Display(cfg)         # avant gpiozero : initialise en root
+        rear = None
+        if cfg.rear_enabled:
+            from hey.display import OledDisplay
+
+            try:
+                rear = OledDisplay(cfg)
+            except Exception as error:      # écran absent : l'avant suffit
+                print("Écran arrière indisponible :", error, file=sys.stderr)
         inputs = GpioInputs(cfg, indicator)
         footer = ""
 
@@ -62,11 +76,25 @@ def main():
 
     signal.signal(signal.SIGTERM, lambda *_: stop.set())
     period = 1.0 / cfg.fps
+    rear_period = 1.0 / cfg.rear_fps
+    next_rear = next_address = 0.0
     try:
         while not stop.is_set():
             started = time.monotonic()
             indicator.tick()
-            display.show(renderer.render(indicator.snapshot()))
+            snap = indicator.snapshot()
+            front = renderer.render(snap, started)
+            if started >= next_address:     # l'adresse peut changer (DHCP, Wi-Fi)
+                rear_renderer.address = local_address()
+                next_address = started + 30.0
+            if args.sim:
+                back = rear_renderer.render(snap, started) if cfg.rear_enabled else None
+                display.show(front, back)
+            else:
+                display.show(front)
+                if rear is not None and started >= next_rear:
+                    rear.show(rear_renderer.render(snap, started))
+                    next_rear = started + rear_period
             if footer:
                 sys.stdout.write("\x1b[0m" + footer + "\x1b[K\r\n")
                 if server:
@@ -80,6 +108,8 @@ def main():
             server.shutdown()
         inputs.close()
         display.close()
+        if rear is not None:
+            rear.close()
         print("Arrêt du programme")
 
 

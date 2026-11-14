@@ -11,7 +11,8 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from hey import font
 from hey.api import start_server
-from hey.config import Config
+from hey.config import PANELS, Config
+from hey.rear import RearRenderer, wrap
 from hey.render import Renderer
 from hey.state import Indicator, clean_text
 
@@ -109,11 +110,47 @@ class StateTest(unittest.TestCase):
         self.assertEqual(len(clean_text("x" * 200, 60)), 60)
 
 
+class ConfigTest(unittest.TestCase):
+    def test_presets(self):
+        self.assertEqual((Config().cols, Config().rows), (64, 32))
+        cfg = Config(panel="80x40")
+        self.assertEqual((cfg.cols, cfg.rows, cfg.pitch), (80, 40, 4.0))
+        with self.assertRaises(ValueError):
+            Config(panel="99x99")
+
+    def test_default_pins_are_free_on_both_panels(self):
+        for panel in PANELS:
+            Config(panel=panel).check_pins()
+
+    def test_pin_conflicts_are_caught(self):
+        cfg = Config(panel="80x40")
+        cfg.button_pins["hey"] = 24                 # ligne E des dalles 40 lignes
+        with self.assertRaises(ValueError):
+            cfg.check_pins()
+        cfg = Config(hardware_mapping="adafruit-hat-pwm")
+        with self.assertRaises(ValueError):         # GPIO 18 pris par le pont qualité
+            cfg.check_pins()
+        cfg = Config()
+        cfg.key_pin = cfg.switch_pin
+        with self.assertRaises(ValueError):
+            cfg.check_pins()
+        cfg = Config()
+        cfg.key_pin = 3                             # I2C de l'écran arrière
+        with self.assertRaises(ValueError):
+            cfg.check_pins()
+
+
 class RenderTest(unittest.TestCase):
     def test_every_screen_draws_and_fits(self):
-        cfg = Config()
+        for panel in PANELS:
+            with self.subTest(panel=panel):
+                self._every_screen(Config(panel=panel), (PANELS[panel]["cols"],
+                                                         PANELS[panel]["rows"]))
+
+    def _every_screen(self, cfg, size):
         clock = FakeClock()
         renderer = Renderer(cfg)
+        rear = RearRenderer(cfg, "10.0.0.2")
         ind = Indicator(cfg, clock)
         steps = [lambda: None, lambda: ind.set_mode("busy"), lambda: ind.adjust(1),
                  lambda: (setattr(clock, "now", clock.now + 5), ind.timer_start()),
@@ -124,11 +161,21 @@ class RenderTest(unittest.TestCase):
             step()
             snap = ind.snapshot()
             seen.add(snap["screen"])
-            for t in (0.0, 0.3, 1.7):
+            for t in (0.0, 0.3, 1.7, 5.0):
                 image = renderer.render(snap, t)
-                self.assertEqual(image.size, (64, 32))
+                self.assertEqual(image.size, size)
                 self.assertIsNotNone(image.getbbox(), snap["screen"])
+                back = rear.render(snap, t)
+                self.assertEqual((back.size, back.mode), ((128, 64), "1"))
+                self.assertIsNotNone(back.getbbox(), snap["screen"])
         self.assertEqual(seen, {"free", "busy", "setting", "focus", "on_air", "hey", "urgency"})
+
+    def test_rear_wraps_long_messages(self):
+        lines = wrap("UN MESSAGE ASSEZ LONG POUR TENIR SUR PLUSIEURS LIGNES SANS DEBORDER", 124)
+        self.assertGreater(len(lines), 1)
+        for line in lines:
+            self.assertLessEqual(font.text_width(line), 124)
+        self.assertTrue(all(font.text_width(l) <= 30 for l in wrap("ANTICONSTITUTIONNELLEMENT", 30)))
 
     def test_labels_fit_width(self):
         cfg = Config()
@@ -245,6 +292,17 @@ class GpioTest(unittest.TestCase):
         self.tap(self.cfg.encoder_sw_pin, held=0.4)  # appui long : remise à zéro
         self.assertEqual(self.ind.phase, "idle")
 
+    def test_mechanical_key(self):
+        self.tap(self.cfg.key_pin)
+        self.assertTrue(self.ind.running)
+        self.tap(self.cfg.button_pins["urgency"])
+        self.tap(self.cfg.key_pin)                  # acquitte sans toucher au minuteur
+        self.assertEqual(self.ind.snapshot()["screen"], "focus")
+        self.assertTrue(self.ind.running)
+        self.tap(self.cfg.key_pin, held=0.4)
+        self.assertEqual(self.ind.phase, "idle")
+        self.sleep(0.6)
+
     def test_knob_rotation(self):
         a, b = self.pin(self.cfg.encoder_a_pin), self.pin(self.cfg.encoder_b_pin)
 
@@ -258,6 +316,38 @@ class GpioTest(unittest.TestCase):
         self.assertEqual(abs(once - 25), 1)
         detent(b, a)
         self.assertEqual(self.ind.focus_minutes, 25)
+
+
+try:
+    import luma.oled  # noqa: F401
+except ImportError:
+    luma = None
+
+
+@unittest.skipIf(luma is None, "luma.oled absent")
+class OledTest(unittest.TestCase):
+    """Le vrai pilote luma.oled, branché sur une interface factice."""
+
+    def test_rear_display_sends_only_changes(self):
+        from unittest import mock
+
+        from luma.core.interface import serial
+
+        from hey.display import OledDisplay
+
+        cfg = Config()
+        with mock.patch.object(serial, "i2c", lambda **kw: serial.noop()):
+            oled = OledDisplay(cfg)
+        sent = []
+        oled._device.display = lambda image: sent.append(image)
+        rear = RearRenderer(cfg)
+        ind = Indicator(cfg)
+        oled.show(rear.render(ind.snapshot(), 0.0))
+        oled.show(rear.render(ind.snapshot(), 0.0))     # identique : rien n'est envoyé
+        ind.urgency()
+        oled.show(rear.render(ind.snapshot(), 0.0))
+        self.assertEqual(len(sent), 2)
+        oled.close()
 
 
 if __name__ == "__main__":

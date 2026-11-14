@@ -1,9 +1,15 @@
 # hey-indicator
 
-Indicateur de disponibilité de bureau à écran LED : une dalle 64x32 affiche **FREE**, **BUSY**,
+Indicateur de disponibilité de bureau à écran LED : une dalle 64x32 ou 80x40 affiche **FREE**, **BUSY**,
 **ON AIR**, un **HEY!** ou une alerte **URGENT**, plus un minuteur Pomodoro.
+Au dos, un petit écran OLED montre le détail à la personne au bureau ; sur le
+dessus, une touche de clavier mécanique lance et met en pause le minuteur.
 
-![Les écrans](docs/screens/planche.png)
+![Le boîtier, dalle 64x32](hardware/case/out/64x32/apercu.png)
+
+| Dalle 64x32 | Dalle 80x40 |
+|---|---|
+| ![](docs/screens/64x32/planche.png) | ![](docs/screens/80x40/planche.png) |
 
 La v1 (5 LED, 3 boutons, un interrupteur sur Raspberry Pi) reste dans
 l'historique git. La v2 garde ses cinq états et le Raspberry Pi.
@@ -12,12 +18,15 @@ l'historique git. La v2 garde ses cinq états et le Raspberry Pi.
 
 ```sh
 pip install Pillow
-python3 main.py --sim
+python3 main.py --sim                  # dalle 64x32
+python3 main.py --sim --panel 80x40    # dalle Waveshare 80x40
 ```
 
-Le simulateur dessine l'écran dans le terminal. Touches : `f`/`b` free/busy,
-`o` on air, `h` hey, `u` urgency, `espace` molette, `r` reset, `+`/`-` minutes,
-`q` quitter. L'API et la page web tournent aussi : <http://localhost:8080/>.
+Le simulateur dessine l'écran avant dans le terminal, et l'écran arrière
+dessous si le terminal fait au moins 128 colonnes. Touches : `f`/`b`
+free/busy, `o` on air, `h` hey, `u` urgency, `espace` touche, `r` reset,
+`+`/`-` minutes, `q` quitter. L'API et la page web tournent aussi :
+<http://localhost:8080/>.
 
 ## Commandes
 
@@ -27,9 +36,10 @@ Le simulateur dessine l'écran dans le terminal. Touches : `f`/`b` free/busy,
 | Poussoir On Air | bascule l'enseigne On Air (chrono depuis le début) |
 | Poussoir Hey | affiche HEY! pendant 10 s, avec un bip |
 | Poussoir Urgency | alerte clignotante jusqu'à acquittement (2 min max) |
+| Touche mécanique, appui court | acquitte une alerte, sinon démarre / met en pause |
+| Touche mécanique, appui long | remet le minuteur à zéro |
 | Molette, rotation | règle la durée du focus ; ±1 min si le minuteur tourne |
-| Molette, appui court | acquitte une alerte, sinon démarre / met en pause |
-| Molette, appui long | remet le minuteur à zéro |
+| Molette, appui | comme la touche |
 
 Priorité d'affichage : urgency > hey > réglage > on air > minuteur > free/busy.
 À la fin du focus (25 min) la pause (5 min) démarre toute seule.
@@ -72,18 +82,19 @@ webcam sert (Linux, non testé sur une vraie machine).
 Voir [hardware/README.md](hardware/README.md) : liste de courses, câblage,
 installation sur le Pi, boîtier imprimable.
 
-![Le boîtier](hardware/case/out/apercu.png)
+![Les deux boîtiers à la même échelle](hardware/case/out/comparaison.png)
 
 ## Organisation du code
 
 | Fichier | Rôle |
 |---|---|
 | `main.py` | boucle principale |
-| `hey/config.py` | broches, durées, textes, couleurs |
+| `hey/config.py` | dalle, broches, durées, textes, couleurs |
 | `hey/state.py` | machine à états, sans matériel |
-| `hey/render.py`, `hey/font.py` | dessin des écrans |
-| `hey/display.py` | dalle HUB75 ou simulateur terminal |
-| `hey/inputs.py` | boutons, molette, buzzer, clavier du simulateur |
+| `hey/render.py`, `hey/font.py` | dessin de l'écran avant |
+| `hey/rear.py` | dessin de l'écran arrière |
+| `hey/display.py` | dalle HUB75, OLED ou simulateur terminal |
+| `hey/inputs.py` | touche, boutons, molette, buzzer, clavier du simulateur |
 | `hey/api.py` | API HTTP et page web |
 
 ```sh

@@ -3,6 +3,7 @@ Pillow
 
 # Sur le Raspberry Pi uniquement
 gpiozero
+luma.oled          # écran arrière
 # rgbmatrix : bibliothèque hzeller/rpi-rgb-led-matrix, à compiler sur le Pi
 # (voir hardware/README.md, script d'installation Adafruit).
 
