@@ -1,15 +1,15 @@
 # hey-indicator
 
-Indicateur de disponibilité de bureau à écran LED : une dalle 64x32 ou 80x40 affiche **FREE**, **BUSY**,
+Indicateur de disponibilité de bureau à écran LED : une dalle 64x32 affiche **FREE**, **BUSY**,
 **ON AIR**, un **HEY!** ou une alerte **URGENT**, plus un minuteur Pomodoro.
 Au dos, un petit écran OLED montre le détail à la personne au bureau ; sur le
 dessus, une touche de clavier mécanique lance et met en pause le minuteur.
 
-![Le boîtier, dalle 64x32](hardware/case/out/64x32/apercu.png)
+![Le boîtier](hardware/case/out/apercu.png)
 
-| Dalle 64x32 | Dalle 80x40 |
+| Écran avant | Écran arrière |
 |---|---|
-| ![](docs/screens/64x32/planche.png) | ![](docs/screens/80x40/planche.png) |
+| ![](docs/screens/planche.png) | ![](docs/screens/arriere/planche.png) |
 
 La v1 (5 LED, 3 boutons, un interrupteur sur Raspberry Pi) reste dans
 l'historique git. La v2 garde ses cinq états et le Raspberry Pi.
@@ -18,8 +18,7 @@ l'historique git. La v2 garde ses cinq états et le Raspberry Pi.
 
 ```sh
 pip install Pillow
-python3 main.py --sim                  # dalle 64x32
-python3 main.py --sim --panel 80x40    # dalle Waveshare 80x40
+python3 main.py --sim
 ```
 
 Le simulateur dessine l'écran avant dans le terminal, et l'écran arrière
@@ -81,8 +80,6 @@ webcam sert (Linux, non testé sur une vraie machine).
 
 Voir [hardware/README.md](hardware/README.md) : liste de courses, câblage,
 installation sur le Pi, boîtier imprimable.
-
-![Les deux boîtiers à la même échelle](hardware/case/out/comparaison.png)
 
 ## Organisation du code
 

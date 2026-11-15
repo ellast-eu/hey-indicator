@@ -15,7 +15,7 @@ import threading
 import time
 
 from hey.api import start_server
-from hey.config import PANELS, Config
+from hey.config import Config
 from hey.rear import RearRenderer, local_address
 from hey.render import Renderer
 from hey.state import Indicator
@@ -28,11 +28,9 @@ def main():
     parser.add_argument("--port", type=int, help="port de l'API HTTP")
     parser.add_argument("--host", help="adresse d'écoute de l'API HTTP")
     parser.add_argument("--no-api", action="store_true", help="ne pas lancer l'API HTTP")
-    parser.add_argument("--panel", choices=sorted(PANELS),
-                        help="dalle avant (défaut : HEY_PANEL, sinon 64x32)")
     args = parser.parse_args()
 
-    cfg = Config(panel=args.panel) if args.panel else Config()
+    cfg = Config()
     if args.port:
         cfg.http_port = args.port
     if args.host:

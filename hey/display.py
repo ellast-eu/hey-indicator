@@ -48,7 +48,7 @@ class OledDisplay:
         from luma.core.interface.serial import i2c
         from luma.oled import device
 
-        driver = getattr(device, cfg.rear_driver)   # sh1106, ssd1306, ssd1309...
+        driver = getattr(device, cfg.rear_driver)   # sh1106, ssd1306...
         self._device = driver(i2c(port=1, address=cfg.rear_address), rotate=cfg.rear_rotate)
         self._device.contrast(cfg.rear_contrast)
         self._last = None

@@ -4,10 +4,7 @@
 Petit rendu maison (projection orthographique + tampon de profondeur) pour ne
 dépendre que de numpy, Pillow et CadQuery.
 
-    python3 hardware/case/render_preview.py           # toutes les dalles
-
-Écrit out/<dalle>/apercu.png (avant et arrière) et out/comparaison.png (les
-deux boîtiers de face, à la même échelle).
+    python3 hardware/case/render_preview.py      # écrit out/apercu.png
 """
 
 import os
@@ -121,7 +118,7 @@ def caps():
 
 
 def scene_parts(snap_front, snap_back, cover_offset=0.0):
-    cfg = Config(panel=h.PANEL)
+    cfg = Config()
     leds = Renderer(cfg).render(snap_front, 0.0)
     rear = RearRenderer(cfg, "192.168.1.20").render(snap_back, 0.0)
     led_tris, led_colors = quads(led_cells(leds, cfg.pitch), h.FRONT_T + h.SMOKED_T - 0.05, -1)
@@ -192,7 +189,7 @@ def render(parts, yaw, pitch, center, scale, size):
 
 
 def snapshots():
-    cfg = Config(panel=h.PANEL)
+    cfg = Config()
     front = Indicator(cfg)
     front.set_mode("busy")
     back = Indicator(cfg)
@@ -218,40 +215,21 @@ def label(image, text, xy=(16, 12)):
 
 def main():
     out_root = os.path.join(os.path.dirname(os.path.abspath(__file__)), "out")
-    fronts = []
-    for panel in h.PANELS:
-        h.configure(panel)
-        snap_front, snap_back = snapshots()
-        parts = scene_parts(snap_front, snap_back)
-        middle = (0, 0, (h.BODY_D + h.COVER_T) / 2)
-        size = (900, 620)
-        scale = 0.62 * size[0] / h.OUTER_W
-        front = render(parts, yaw=28, pitch=-24, center=middle, scale=scale, size=size)
-        back = render(parts, yaw=205, pitch=-24, center=middle, scale=scale, size=size)
-        sheet = Image.new("RGB", (size[0] * 2, size[1]), BACKGROUND)
-        sheet.paste(front, (0, 0))
-        sheet.paste(back, (size[0], 0))
-        label(sheet, "Dalle %s : %.0f x %.0f x %.0f mm   (avant / arrière)"
-              % (panel, h.OUTER_W, h.OUTER_H, h.BODY_D + h.COVER_T))
-        os.makedirs(os.path.join(out_root, panel), exist_ok=True)
-        path = os.path.join(out_root, panel, "apercu.png")
-        sheet.save(path)
-        print(path)
-        # Vue de face à l'échelle commune pour la comparaison.
-        fronts.append((panel, (h.OUTER_W, h.OUTER_H), render(parts, yaw=18, pitch=-14, center=middle, scale=2.4,
-                                     size=(int(h.OUTER_W * 2.4 * 1.12), int(h.OUTER_H * 2.4 * 1.9)))))
-
-    pad = 20
-    width = sum(img.size[0] for _, _, img in fronts) + pad * (len(fronts) + 1)
-    height = max(img.size[1] for _, _, img in fronts) + 2 * pad
-    board = Image.new("RGB", (width, height), BACKGROUND)
-    x = pad
-    for panel, outer, img in fronts:
-        board.paste(img, (x, height - pad - img.size[1]))
-        label(board, "%s : %.0f x %.0f mm" % ((panel,) + outer), (x + 10, pad))
-        x += img.size[0] + pad
-    path = os.path.join(out_root, "comparaison.png")
-    board.save(path)
+    snap_front, snap_back = snapshots()
+    parts = scene_parts(snap_front, snap_back)
+    middle = (0, 0, (h.BODY_D + h.COVER_T) / 2)
+    size = (900, 620)
+    scale = 0.62 * size[0] / h.OUTER_W
+    front = render(parts, yaw=28, pitch=-24, center=middle, scale=scale, size=size)
+    back = render(parts, yaw=205, pitch=-24, center=middle, scale=scale, size=size)
+    sheet = Image.new("RGB", (size[0] * 2, size[1]), BACKGROUND)
+    sheet.paste(front, (0, 0))
+    sheet.paste(back, (size[0], 0))
+    label(sheet, "%.0f x %.0f x %.0f mm   (avant / arrière)"
+          % (h.OUTER_W, h.OUTER_H, h.BODY_D + h.COVER_T))
+    os.makedirs(out_root, exist_ok=True)
+    path = os.path.join(out_root, "apercu.png")
+    sheet.save(path)
     print(path)
 
 

@@ -11,7 +11,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from hey import font
 from hey.api import start_server
-from hey.config import PANELS, Config
+from hey.config import Config
 from hey.rear import RearRenderer, wrap
 from hey.render import Renderer
 from hey.state import Indicator, clean_text
@@ -111,24 +111,16 @@ class StateTest(unittest.TestCase):
 
 
 class ConfigTest(unittest.TestCase):
-    def test_presets(self):
-        self.assertEqual((Config().cols, Config().rows), (64, 32))
-        cfg = Config(panel="80x40")
-        self.assertEqual((cfg.cols, cfg.rows, cfg.pitch), (80, 40, 4.0))
-        with self.assertRaises(ValueError):
-            Config(panel="99x99")
-
-    def test_default_pins_are_free_on_both_panels(self):
-        for panel in PANELS:
-            Config(panel=panel).check_pins()
+    def test_default_pins_are_free(self):
+        Config().check_pins()
 
     def test_pin_conflicts_are_caught(self):
-        cfg = Config(panel="80x40")
-        cfg.button_pins["hey"] = 24                 # ligne E des dalles 40 lignes
+        cfg = Config(hardware_mapping="adafruit-hat-pwm")
+        cfg.button_pins["hey"] = 18                 # GPIO 18 pris par le pont qualité
         with self.assertRaises(ValueError):
             cfg.check_pins()
-        cfg = Config(hardware_mapping="adafruit-hat-pwm")
-        with self.assertRaises(ValueError):         # GPIO 18 pris par le pont qualité
+        cfg = Config(rows=64)                       # dalle 64 lignes : GPIO 24 = ligne E
+        with self.assertRaises(ValueError):
             cfg.check_pins()
         cfg = Config()
         cfg.key_pin = cfg.switch_pin
@@ -142,12 +134,8 @@ class ConfigTest(unittest.TestCase):
 
 class RenderTest(unittest.TestCase):
     def test_every_screen_draws_and_fits(self):
-        for panel in PANELS:
-            with self.subTest(panel=panel):
-                self._every_screen(Config(panel=panel), (PANELS[panel]["cols"],
-                                                         PANELS[panel]["rows"]))
-
-    def _every_screen(self, cfg, size):
+        cfg = Config()
+        size = (64, 32)
         clock = FakeClock()
         renderer = Renderer(cfg)
         rear = RearRenderer(cfg, "10.0.0.2")

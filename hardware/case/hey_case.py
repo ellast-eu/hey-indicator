@@ -2,10 +2,7 @@
 """Boîtier paramétrique de hey-indicator v2 (CadQuery).
 
     pip install cadquery
-    python3 hardware/case/hey_case.py              # dalle 64x32
-    python3 hardware/case/hey_case.py 80x40        # dalle Waveshare 80x40
-
-Écrit STL + STEP dans hardware/case/out/<dalle>/.
+    python3 hardware/case/hey_case.py      # écrit STL + STEP dans hardware/case/out/
 
 Deux pièces à imprimer, sans supports :
   - corps  : face avant posée sur le plateau ;
@@ -22,16 +19,13 @@ courantes, pas celles d'une référence précise.
 """
 
 import os
-import sys
 
 import cadquery as cq
 
-# Taille des dalles (mm). Épaisseur non publiée par Waveshare pour la 80x40 :
-# 15 mm est une hypothèse à vérifier sur la dalle reçue.
-PANELS = {
-    "64x32": {"w": 160.0, "h": 80.0, "d": 15.0},
-    "80x40": {"w": 320.0, "h": 160.0, "d": 15.0},
-}
+# --- Dalle LED HUB75 64x32 au pas de 2,5 mm ----------------------------------
+PANEL_W = 160.0
+PANEL_H = 80.0
+PANEL_D = 15.0          # épaisseur cadre compris (hors connecteurs arrière)
 
 CLEAR = 0.3             # jeu autour de la dalle
 LIP = 0.6               # recouvrement de la fenêtre sur le bord de la dalle
@@ -82,34 +76,20 @@ OLED_PCB = (36.0, 34.5)     # carte du module, avec jeu
 OLED_PCB_OFFSET_Y = 2.0     # carte décentrée vers ses broches (en haut) : à mesurer
 OLED_SKIN = 1.0             # épaisseur restante devant l'écran
 
-PANEL = None
-
-
-def configure(panel):
-    """Calcule toutes les cotes pour une dalle (variables du module)."""
-    if panel not in PANELS:
-        raise SystemExit("dalle inconnue : %s (connues : %s)" % (panel, ", ".join(PANELS)))
-    size = PANELS[panel]
-    values = {"PANEL": panel, "PANEL_W": size["w"], "PANEL_H": size["h"], "PANEL_D": size["d"]}
-    values["CAV_W"] = values["PANEL_W"] + 2 * CLEAR + 2 * CHEEK
-    values["CAV_H"] = values["PANEL_H"] + 2 * CLEAR
-    values["OUTER_W"] = values["CAV_W"] + 2 * WALL
-    values["OUTER_H"] = values["CAV_H"] + 2 * WALL
-    values["BODY_D"] = FRONT_T + DEPTH_IN
-    values["POST_X"] = values["CAV_W"] / 2 - CHEEK / 2
-    values["POST_Y"] = values["CAV_H"] / 2 - POST_H / 2
-    values["PUSHER_LEN"] = DEPTH_IN - values["PANEL_D"] - SMOKED_T - 0.3
-    values["PUSHER_POS"] = (PUSHER_FRAC[0] * values["PANEL_W"],
-                            PUSHER_FRAC[1] * values["PANEL_H"])
-    span = values["CAV_W"] - 2 * CHEEK - 2 * BUTTON_D
-    pitch = min(CTRL_PITCH, span / (len(TOP_CONTROLS) - 1))
-    first = -pitch * (len(TOP_CONTROLS) - 1) / 2
-    values["CONTROL_X"] = {name: first + index * pitch
-                           for index, name in enumerate(TOP_CONTROLS)}
-    globals().update(values)
-
-
-configure(os.environ.get("HEY_PANEL", "64x32"))
+# --- Cotes dérivées -----------------------------------------------------------
+CAV_W = PANEL_W + 2 * CLEAR + 2 * CHEEK
+CAV_H = PANEL_H + 2 * CLEAR
+OUTER_W = CAV_W + 2 * WALL
+OUTER_H = CAV_H + 2 * WALL
+BODY_D = FRONT_T + DEPTH_IN
+POST_X = CAV_W / 2 - CHEEK / 2
+POST_Y = CAV_H / 2 - POST_H / 2
+PUSHER_LEN = DEPTH_IN - PANEL_D - SMOKED_T - 0.3
+PUSHER_POS = (PUSHER_FRAC[0] * PANEL_W, PUSHER_FRAC[1] * PANEL_H)
+_SPAN = CAV_W - 2 * CHEEK - 2 * BUTTON_D
+_PITCH = min(CTRL_PITCH, _SPAN / (len(TOP_CONTROLS) - 1))
+CONTROL_X = {name: (index - (len(TOP_CONTROLS) - 1) / 2) * _PITCH
+             for index, name in enumerate(TOP_CONTROLS)}
 
 
 def cylinder(diameter, length, origin, direction):
@@ -218,9 +198,7 @@ def make_panel():
 
 
 def main():
-    if len(sys.argv) > 1:
-        configure(sys.argv[1])
-    out = os.path.join(os.path.dirname(os.path.abspath(__file__)), "out", PANEL)
+    out = os.path.join(os.path.dirname(os.path.abspath(__file__)), "out")
     os.makedirs(out, exist_ok=True)
     body, cover = make_body(), make_cover()
     # Capot retourné pour l'impression : face extérieure sur le plateau.
@@ -235,8 +213,7 @@ def main():
                 .add(cover, name="capot", color=cq.Color(0.15, 0.15, 0.17))
                 .add(make_panel(), name="dalle", color=cq.Color(0.02, 0.02, 0.02)))
     assembly.export(os.path.join(out, "hey-assemblage.step"))
-    print("Dalle %s, encombrement : %.1f x %.1f x %.1f mm"
-          % (PANEL, OUTER_W, OUTER_H, BODY_D + COVER_T))
+    print("Encombrement : %.1f x %.1f x %.1f mm" % (OUTER_W, OUTER_H, BODY_D + COVER_T))
     print("Fichiers écrits dans", out)
 
 
